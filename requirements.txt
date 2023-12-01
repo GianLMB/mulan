@@ -1,0 +1,8 @@
+numpy
+scipy
+pandas
+tqdm
+h5py
+torch>=2.0
+transformers<4.45,>=4.27
+sentencepiece

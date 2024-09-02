@@ -8,8 +8,8 @@ import pandas as pd
 import torch
 import numpy as np
 
-from mulan import utils, constants as C
-from mulan.modules import LightAttModel
+import mulan
+import mulan.utils as utils
 
 
 def get_args():
@@ -24,10 +24,11 @@ def get_args():
         The first is the sequence to be scored, the other is the partner.""",
     )
     parser.add_argument(
-        "-m", "--model-name",
+        "-m",
+        "--model-name",
         type=str,
         default="mulan-ankh",
-        help=f"""Name of the pre-trained model. Must be one of: {C.MODELS.keys()}.
+        help=f"""Name of the pre-trained model. Must be one of: {mulan.get_available_models()}.
         If the model is a version of imulan, a TXT file containing zero-shot scores 
         must be provided, where lines correspond to mutated positions and columns 
         to amino acids, in alphabetic order for the single letter name, separated 
@@ -58,8 +59,8 @@ def get_args():
         help="If not None, directory to store embeddings in PT format.",
     )
     args = parser.parse_args()
-    if args.model_name not in C.MODELS:
-        raise ValueError(f"Model name must be one of: {C.MODELS.keys()}")
+    if args.model_name not in mulan.get_available_models():
+        raise ValueError(f"Invalid model name: {args.model_name}")
     args.sequences = args.sequences.upper()
     if "imulan" in args.model_name and args.scores_file is None:
         raise ValueError("Zero-shot scores file must be provided for imulan models.")
@@ -86,7 +87,7 @@ def score_mutation(
                 wildtype_embedding,
                 partner_embedding,
                 mutation_embedding,
-                partner_embedding
+                partner_embedding,
             ],
             zs_scores=zs_score,
         )
@@ -104,7 +105,7 @@ def run(
     """Compute full mutational landscape of a protein in a given complex."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     seq1, seq2 = re.sub(r"[UZOB]", "X", sequences).split(":")
-    output = torch.zeros(len(seq1), len(C.AAs))
+    output = torch.zeros(len(seq1), len(utils.AAs))
     os.makedirs(output_dir, exist_ok=True)
     if embeddings_dir is not None:
         os.makedirs(embeddings_dir, exist_ok=True)
@@ -112,7 +113,7 @@ def run(
     # load models
     plm_name = model_name.split("-")[1]
     plm_model, plm_tokenizer = utils.load_pretrained_plm(plm_name, device=device)
-    model = LightAttModel.from_pretrained(C.MODELS[model_name])
+    model = mulan.load_pretrained(model_name)
     model.eval()
 
     if scores_file is not None:
@@ -127,12 +128,12 @@ def run(
         utils.save_embedding(partner_embedding, embeddings_dir, "PARTNER")
 
     # iterate over single-point mutations
-    num_iterations = len(seq1) * (len(C.AAs) - 1)
+    num_iterations = len(seq1) * (len(utils.AAs) - 1)
     pbar = tqdm(initial=0, total=num_iterations, colour="red", dynamic_ncols=True, ascii="-#")
     pbar.set_description("Scoring mutations")
     for mut_name, mutation in utils.mutation_generator(seq1):
         i, aa = int(mut_name[1:-1]) - 1, mut_name[-1]
-        zs_score = None if scores_file is None else zs_scores[i, C.aa2idx[aa]]
+        zs_score = None if scores_file is None else zs_scores[i, utils.aa2idx[aa]]
         score = score_mutation(
             model,
             plm_model,
@@ -144,16 +145,18 @@ def run(
             zs_score,
             embeddings_dir,
         )
-        output[i, C.aa2idx[aa]] = score
+        output[i, utils.aa2idx[aa]] = score
         pbar.update(1)
 
     # save output
     output = output.cpu().numpy()
     if ranksort_output:
-        wt_index = (range(len(seq1)), tuple([C.aa2idx[aa] for aa in seq1]))
+        wt_index = (range(len(seq1)), tuple([utils.aa2idx[aa] for aa in seq1]))
         output[wt_index] = -10000  # set to very low value to give lowest scores to wt residues
         output = utils.ranksort(output)
-    output = pd.DataFrame(output, columns=C.AAs, index=[f"{i+1}{aa}" for i, aa in enumerate(seq1)])
+    output = pd.DataFrame(
+        output, columns=utils.AAs, index=[f"{i+1}{aa}" for i, aa in enumerate(seq1)]
+    )
     output.to_csv(os.path.join(output_dir, "landscape.csv"), float_format="%.3f")
 
 

@@ -9,6 +9,7 @@ import numpy as np
 from scipy.stats import rankdata
 
 import mulan.constants as C
+from mulan.constants import AAs, aa2idx, idx2aa, one2three, three2one  # noqa
 
 
 def mutation_generator(sequence):
@@ -72,28 +73,39 @@ def dict_to_fasta(fasta_dict, fasta_file):
             f.write(f"{value}\n")
 
 
-def get_plm_names():
+def get_available_plms():
     """Return the names of the available pretrained language models."""
     return list(C.PLM_ENCODERS.keys())
+
+
+def get_available_models():
+    """Return the names of the available Mulan models."""
+    return list(C.MODELS.keys())
 
 
 def load_pretrained_plm(model_name, device="cpu"):
     model_id = C.PLM_ENCODERS.get(model_name)
     if model_id is None:
-        raise ValueError(f"Invalid model_name: {model_name}. Must be one of {get_plm_names()}")
-    
+        raise ValueError(
+            f"Invalid model_name: {model_name}. Must be one of {get_available_plms()}"
+        )
+
     if "t5" in model_id or "ankh" in model_id:
         from transformers import T5EncoderModel
+
         model = T5EncoderModel.from_pretrained(model_id)
         if "ankh" in model_id:
             from transformers import AutoTokenizer
+
             tokenizer = AutoTokenizer.from_pretrained(model_id)
         else:
             from transformers import T5Tokenizer
-            tokenizer = T5Tokenizer.from_pretrained(model_id)  
+
+            tokenizer = T5Tokenizer.from_pretrained(model_id)
     else:
         try:
             from transformers import AutoTokenizer, AutoModel
+
             tokenizer = AutoTokenizer.from_pretrained(model_id)
             model = AutoModel.from_pretrained(model_id)
         except Exception as e:
@@ -101,6 +113,16 @@ def load_pretrained_plm(model_name, device="cpu"):
     model = model.to(device)
     model = model.eval()
     return model, tokenizer
+
+
+def load_pretrained(pretrained_model_name, device=None, **kwargs):
+    """Load a pretrained model from disk."""
+    model_path = C.MODELS.get(pretrained_model_name)
+    if model_path is None:
+        raise ValueError(f"Invalid model_name: {pretrained_model_name}")
+    from mulan.modules import LightAttModel
+
+    return LightAttModel.from_pretrained(model_path, device=device, **kwargs)
 
 
 @torch.inference_mode()

@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 
 def get_args():
     parser = ArgumentParser(
-        prog="train",
+        prog="mulan-train",
         description=__doc__,
     )
     args = parser.parse_args()

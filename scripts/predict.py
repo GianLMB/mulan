@@ -7,21 +7,20 @@ from tqdm import tqdm
 import torch
 import pandas as pd
 
-import mulan.constants as C
-from mulan import utils
-from mulan.modules import LightAttModel
+import mulan
+import mulan.utils as utils
 
 
 def get_args():
     parser = ArgumentParser(
-        prog="predict",
+        prog="mulan-predict",
         description=__doc__,
     )
     parser.add_argument(
-        "model_name",
+        "--model-name",
         type=str,
         default="mulan-ankh",
-        help=f"Name of the pre-trained model. Must be one of: {C.MODELS.keys()}.",
+        help=f"Name of the pre-trained model. Must be one of: {mulan.get_available_models()}.",
     )
     parser.add_argument(
         "input_file",
@@ -54,9 +53,11 @@ def get_args():
     parser.add_argument(
         "--store-embeddings",
         action="store_true",
-        help="Store embeddings in PT format. Only wild type embeddings are stored.",
+        help="Store embeddings in PT format. Output directory is the same of 'output_file'.",
     )
     args = parser.parse_args()
+    if args.model_name not in mulan.get_available_models():
+        raise ValueError(f"Invalid model name: {args.model_name}")
     return args
 
 
@@ -97,8 +98,9 @@ def run(model_name, input_file, scores_file, output_file, store_embeddings):
     num_iterations = sum(len(d["mutations"]) for d in data)
     scores = []
     plm_name = model_name.split("-")[1]
-    plm_model, plm_tokenizer = utils.load_pretrained_plm(plm_name, device=device)
-    model = LightAttModel.from_pretrained(C.MODELS[model_name])
+    plm_model, plm_tokenizer = mulan.load_pretrained_plm(plm_name, device=device)
+    model = mulan.load_pretrained(model_name)
+    model = model.eval()
     if "imulan" in model_name and scores_file is None:
         raise ValueError("Zero-shot scores file must be provided for imulan models.")
     zs_scores = parse_zs_scores(scores_file) if scores_file is not None else {}
@@ -138,8 +140,6 @@ def run(model_name, input_file, scores_file, output_file, store_embeddings):
             )
 
             if store_embeddings:
-                utils.save_embedding(seq1_embedding, embeddings_dir, f"{complex_name}_A")
-                utils.save_embedding(seq2_embedding, embeddings_dir, f"{complex_name}_B")
                 utils.save_embedding(
                     mut_seq1_embedding, 
                     embeddings_dir, 
@@ -151,9 +151,13 @@ def run(model_name, input_file, scores_file, output_file, store_embeddings):
                     f"{complex_name}_{'-'.join([mut for mut in mutations if mut[1] == 'B'])}"
                 )
             pbar.update(1)
+            
+        if store_embeddings:
+            utils.save_embedding(seq1_embedding, embeddings_dir, f"{complex_name}_A")
+            utils.save_embedding(seq2_embedding, embeddings_dir, f"{complex_name}_B")
                 
     df = pd.DataFrame.from_records(scores)
-    df.to_csv(output_file, index=False, sep="\t")
+    df.to_csv(output_file, index=False, sep="\t", float_format="%.3f")
 
 
 def main():

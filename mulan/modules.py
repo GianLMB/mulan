@@ -69,9 +69,7 @@ class AttentionMeanK(nn.Module):
             ],
             dim=1,
         )
-        # print(attn_weights.shape, o.shape)
         o1 = torch.sum(o * attn_weights, dim=-1).view(batch_size, -1)
-        # print(o1.shape)
 
         # max pooling
         o2, _ = torch.max(o, dim=-1)
@@ -80,7 +78,6 @@ class AttentionMeanK(nn.Module):
         # mlp
         o = torch.cat([o1, o2], dim=-1)
         o = self.fc(o)
-        # attn_mean = torch.softmax(attn_weigths.mean(dim=-1)
         output = OutputWithAttention(o, attn_weights)
 
         return output
@@ -130,7 +127,7 @@ class LightAttModel(nn.Module):
         )
         output = x_mut - x_wt
 
-        if zs_scores is not None and (self.config.add_scores or self.config.add_columns_scores):
+        if zs_scores is not None and self.config.add_scores:
             output = torch.cat((output, zs_scores.view(batch_size, -1)), dim=-1)
         output = self.linear(output).squeeze(-1)
 

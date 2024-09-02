@@ -6,12 +6,12 @@ from argparse import ArgumentParser
 from tqdm import tqdm
 import torch
 
-from mulan import utils, constants as C
+import mulan
 
 
 def get_args():
     parser = ArgumentParser(
-        prog="generate_embeddings",
+        prog="plm-embed",
         description=__doc__,
     )
     parser.add_argument(
@@ -22,8 +22,8 @@ def get_args():
     parser.add_argument(
         "model_name",
         type=str,
-        default="ankh_large",
-        help=f"PLM name to be loaded. Must be one of {C.PLM_ENCODERS.keys()}",
+        default="ankh",
+        help=f"PLM name to be loaded. Must be one of {mulan.get_available_plms()}",
     )
     parser.add_argument(
         "-o",
@@ -33,21 +33,23 @@ def get_args():
         help="Output directory. Defaults to './embeddings'",
     )
     args = parser.parse_args()
+    if args.model_name not in mulan.get_available_plms():
+        raise ValueError(f"Invalid model name: {args.model_name}")
     return args
 
 
 @torch.inference_mode()
 def run(model_name, fasta_file, output_dir):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, tokenizer = utils.load_pretrained_plm(model_name, device=device)
-    dataset = utils.parse_fasta(fasta_file)
+    model, tokenizer = mulan.load_pretrained_plm(model_name, device=device)
+    dataset = mulan.utils.parse_fasta(fasta_file)
     os.makedirs(output_dir, exist_ok=True)
     pbar = tqdm(initial=0, total=len(dataset), colour="red", dynamic_ncols=True, ascii="-#")
     pbar.set_description("Embedding sequences")
     for name, sequence in dataset.items():
         # embed sequence
-        embedding = utils.embed_sequence(model, tokenizer, sequence)
-        utils.save_embedding(embedding, output_dir, name)
+        embedding = mulan.utils.embed_sequence(model, tokenizer, sequence)
+        mulan.utils.save_embedding(embedding, output_dir, name)
         pbar.update(1)
 
 

@@ -49,9 +49,9 @@ three2one = {v: k for k, v in one2three.items()}
 
 
 # Models names and paths
-_BASE_DIR = os.getcwd()  # os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_BASE_DIR = os.environ.get("MULAN", os.getcwd())
 _DEFAULT_MODELS_DIR = os.path.join(_BASE_DIR, "models/pretrained")
-MODELS_DIR = os.environ.get("MULAN_MODELS_DIR", _DEFAULT_MODELS_DIR)
+MODELS_DIR = os.environ.get("MULAN_MODELS_PATH", _DEFAULT_MODELS_DIR)
 MODELS = {
     "mulan-esm": f"{MODELS_DIR}/mulan_esm.ckpt",
     "mulan-esm-multiple": f"{MODELS_DIR}/mulan_esm_multiple.ckpt",

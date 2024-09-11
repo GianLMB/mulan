@@ -3,6 +3,8 @@ scipy
 pandas
 tqdm
 h5py
+scikit-learn
 torch>=2.0
 transformers<4.45,>=4.27
+accelerate
 sentencepiece

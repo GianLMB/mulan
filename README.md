@@ -52,7 +52,7 @@ We provide several command line interfaces for quick usage of MuLAN different ap
 - `mulan-predict` for $\Delta \Delta G$ prediction of single and multiple-point mutations;
 - `mulan-att` to extract residues weights, related to interface regions;
 - `mulan-landscape` to produce a full mutational landscape for a given complex;
-- `mulan-train` to re-train the model on a custom dataset or to run cross validation (not supported yet);
+- `mulan-train` to re-train the model on a custom dataset or to run cross validation;
 - `plm-embed` to extract embeddings from protein language models. 
 Since the script uses the `transformers` interface, only models that are saved on HuggingFace 🤗 Hub can be loaded.
 

@@ -9,7 +9,7 @@ import numpy as np
 from scipy.stats import rankdata
 
 import mulan.constants as C
-from mulan.constants import AAs, aa2idx, idx2aa, one2three, three2one  # noqa
+from mulan.constants import AAs, aa2idx, idx2aa, one2three, three2one
 
 
 def mutation_generator(sequence):
@@ -83,7 +83,9 @@ def get_available_models():
     return list(C.MODELS.keys())
 
 
-def load_pretrained_plm(model_name, device="cpu"):
+def load_pretrained_plm(model_name, device=None):
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_id = C.PLM_ENCODERS.get(model_name)
     if model_id is None:
         raise ValueError(

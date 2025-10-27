@@ -83,10 +83,13 @@ def parse_zs_scores(scores_file):
     zs_scores = defaultdict(dict)
     with open(scores_file) as f:
         for line in f:
+            # print(line)
             complex_name, mutations, score = line.strip().split()
-            mutations = [tuple(m.split(":")) for m in mutations.split(",")]
+            mutations = tuple([m for m in mutations.split(",")])
+            # print(line)
+            # print(complex_name, mutations, score)
             zs_scores[complex_name].update(
-                {mutations: torch.tensor(score, dtype=torch.float32).unsqueeze(0)}
+                {mutations: torch.tensor(float(score), dtype=torch.float32).unsqueeze(0)}
             )
     return zs_scores
 
@@ -127,10 +130,11 @@ def run(model_name, input_file, scores_file, output_file, store_embeddings):
             else:
                 mut_seq2_embedding = seq2_embedding
             inputs = [seq1_embedding, seq2_embedding, mut_seq1_embedding, mut_seq2_embedding]
+            zs_score = zs_scores.get(complex_name, {}).get(mutations, None)
             score = (
                 model(
                     inputs_embeds=inputs,
-                    zs_scores=zs_scores.get(complex_name, {}).get(mutations, None),
+                    zs_scores=zs_score.to(device) if zs_score is not None else None,
                 )
                 .squeeze()
                 .item()

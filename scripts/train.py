@@ -1,12 +1,14 @@
 """Train Mulan model on custom data using HuggingFace Trainer API"""
 
 import os
+import logging
+
 import pandas as pd
 import torch
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
-    logging,
+    logging as hf_logging,
     EarlyStoppingCallback,
     set_seed,
 )
@@ -21,9 +23,8 @@ from mulan.train_utils import (
     default_compute_metrics,
 )
 
-
-logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+hf_logging.set_verbosity_info()
 
 
 def get_args():
@@ -112,13 +113,13 @@ def train(data_args, model_args, custom_training_args):
         logging_strategy="epoch",
         eval_strategy="epoch" if eval_dataset else "no",
         save_strategy="epoch" if model_args.save_model else "no",
-        load_best_model_at_end=(eval_dataset and model_args.save_model),  # to be tested
+        load_best_model_at_end=(eval_dataset and model_args.save_model),
         metric_for_best_model="loss",
         save_total_limit=2,
     )
 
     data_collator = MulanDataCollator(padding_value=model.config.padding_value)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=custom_training_args.learning_rate)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=custom_training_args.learning_rate, weight_decay=0.01)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5
     )
@@ -153,9 +154,6 @@ def train(data_args, model_args, custom_training_args):
         metrics.update(prediction_results.metrics)
 
     trainer.save_metrics("all", metrics)
-
-    # TODO
-    # remove logging message `Trainer.model is not a `PreTrainedModel`, only saving its state dict.``
     if model_args.save_model:
         save_model_ckpt(model, custom_training_args.output_dir)
 

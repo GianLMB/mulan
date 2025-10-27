@@ -35,20 +35,23 @@ def get_args():
         default=None,
         help="If not None, directory to store embeddings in PT format.",
     )
+    parser.add_argument(
+        "-m", "--no-minmax", action="store_true", help="If set, disables min-max scaling of attention weights."
+    )
     args = parser.parse_args()
     if args.model_name not in mulan.get_available_models():
         raise ValueError(f"Invalid model name: {args.model_name}")
     return args
 
 
-@torch.inference_mode
-def run(model_name, fasta_file, output_file, embeddings_dir=None):
+@torch.inference_mode()
+def run(model_name, fasta_file, output_file, embeddings_dir=None, no_minmax=False):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset = mulan.utils.parse_fasta(fasta_file)
     plm_name = model_name.split("-")[1]
     plm_model, plm_tokenizer = mulan.load_pretrained_plm(plm_name, device=device)
     model = mulan.load_pretrained(model_name)
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    os.makedirs(os.path.dirname(output_file), exist_ok=True) if "/" in output_file else None
     if embeddings_dir is not None:
         os.makedirs(embeddings_dir, exist_ok=True)
     pbar = tqdm(initial=0, total=len(dataset), colour="red", dynamic_ncols=True, ascii="-#")
@@ -57,10 +60,12 @@ def run(model_name, fasta_file, output_file, embeddings_dir=None):
         for name, sequence in dataset.items():
             # embed sequence
             embedding = mulan.utils.embed_sequence(plm_model, plm_tokenizer, sequence)
-            # compute attention weights
-            attention = model([embedding] * 4, output_attentions=True).attention[0]
+            attention = model.encoder(embedding).attention
             attention = attention.squeeze(0).cpu().numpy().mean(axis=(-2, -3))
-            attention = mulan.utils.minmax_scale(attention)
+            if not no_minmax:
+                attention = mulan.utils.minmax_scale(attention)
+            else:
+                attention = attention * len(sequence)  # rescale to an average of 1
             # save attention weights
             f.create_dataset(name, data=attention)
             if embeddings_dir is not None:
@@ -70,7 +75,7 @@ def run(model_name, fasta_file, output_file, embeddings_dir=None):
 
 def main():
     args = get_args()
-    run(args.model_name, args.fasta_file, args.output_file, args.embeddings_dir)
+    run(args.model_name, args.fasta_file, args.output_file, args.embeddings_dir, args.no_minmax)
 
 
 if __name__ == "__main__":

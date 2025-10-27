@@ -132,7 +132,7 @@ class CustomisableTrainingArguments:
 class MulanTrainer(Trainer):
     """Custom Trainer class adapted for Mulan model training"""
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None,):
         """
         Computes the loss for MulanDataset inputs for a model that do not return loss values.
         """

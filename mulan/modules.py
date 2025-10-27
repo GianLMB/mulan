@@ -1,11 +1,12 @@
 """Implementation of Light attention model"""
 
-from typing import Union, Sequence, Optional, List
+from typing import Union, Sequence, Optional
 from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
 from mulan.config import MulanConfig
+from mulan.utils import TorchDevice
 
 
 @dataclass
@@ -15,8 +16,9 @@ class OutputWithAttention:
 
 
 class AttentionMeanK(nn.Module):
+    "Light Attention MuLAN encoder"
 
-    def __init__(self, config):
+    def __init__(self, config: MulanConfig):
         super().__init__()
 
         self.padding_value = config.padding_value
@@ -52,7 +54,7 @@ class AttentionMeanK(nn.Module):
             nn.LeakyReLU(0.5),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
 
         # feature convolution
         batch_size, length, hidden = x.shape
@@ -84,8 +86,9 @@ class AttentionMeanK(nn.Module):
 
 
 class LightAttModel(nn.Module):
+    "Light Attention MuLAN model"
 
-    def __init__(self, config):
+    def __init__(self, config: MulanConfig):
         super().__init__()
 
         self.config = config
@@ -99,7 +102,7 @@ class LightAttModel(nn.Module):
 
     def forward(
         self,
-        inputs_embeds: List[torch.FloatTensor],
+        inputs_embeds: Sequence[torch.FloatTensor],
         zs_scores: Optional[torch.FloatTensor] = None,
         output_attentions=False,
     ):
@@ -137,7 +140,9 @@ class LightAttModel(nn.Module):
             return OutputWithAttention(output, tuple([enc.attention for enc in encodings[:2]]))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_path, device=None, **kwargs):
+    def from_pretrained(
+        cls, pretrained_model_path: str, device: Optional[TorchDevice] = None, **kwargs
+    ):
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         ckpt = torch.load(pretrained_model_path, map_location=device, weights_only=False)

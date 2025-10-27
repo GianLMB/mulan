@@ -1,39 +1,46 @@
 """Util functions to process data and models."""
 
-from typing import List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 import os
 import re
 import torch
 import numpy as np
 from scipy.stats import rankdata
+from transformers import PreTrainedTokenizerBase, PreTrainedModel
 
 import mulan.constants as C
 from mulan.constants import AAs, aa2idx, idx2aa, one2three, three2one
 
 
-def mutation_generator(sequence):
-    """Generate all possible single-point mutations for a given sequence."""
+TorchDevice = Union[str, torch.device]
+
+
+def mutation_generator(sequence: str) -> Iterator[Tuple[str, str]]:
+    """Generate all possible single-point mutations for a given sequence.
+    Args:
+        sequence (str): The input sequence for which mutations are generated.
+    Yields:
+        A tuple containing the mutation identifier and the mutated sequence.
+    """
     for i, aa in enumerate(sequence):
         for new_aa in C.AAs:
             if new_aa != aa:
                 yield (f"{aa}{i + 1}{new_aa}", sequence[:i] + new_aa + sequence[i + 1 :])
 
 
-def listed_mutation_generator(sequence1, sequence2, mutations):
-    """Generate mutated sequences from a list of mutations."""
-    for mutation in mutations:
-        seq1, seq2 = list(sequence1), list(sequence2)
-        for single_mut in mutation:
-            chain = single_mut[1]
-            if chain == "A":
-                seq1[int(single_mut[2:-1]) - 1] = single_mut[-1]
-            else:
-                seq2[int(single_mut[2:-1]) - 1] = single_mut[-1]
-        yield "".join(seq1), "".join(seq2)
-
-
-def parse_mutations(mutations: Tuple[str], seq1: str, seq2: str) -> List[Tuple[str, str]]:
+def parse_mutations(mutations: Tuple[str], seq1: str, seq2: str) -> Tuple[str, str]:
+    """
+    Parses a list of mutations and applies them to two sequences.
+    Args:
+        mutations (Tuple[str]): A tuple of strings representing the mutations.
+            Each mutation should be in the format '<wt_aa><chain:A,B><position><mut_aa>'.
+            Example: 'AB23G'.
+        seq1 (str): The first sequence.
+        seq2 (str): The second sequence.
+    Returns:
+        Tuple[str, str]: A tuple representing the modified sequences.
+    """
     seq1, seq2 = list(seq1), list(seq2)
     for single_mut in mutations:
         chain = single_mut[1]
@@ -44,28 +51,31 @@ def parse_mutations(mutations: Tuple[str], seq1: str, seq2: str) -> List[Tuple[s
     return "".join(seq1), "".join(seq2)
 
 
-def alphabetic_tokens_permutation(tokenizer):
-    """Permute the tokenizer vocabulary."""
+def alphabetic_tokens_permutation(tokenizer: PreTrainedTokenizerBase) -> List[int]:
+    """Get indices of standard amino acids in alphabetic order for input tokenizer."""
     vocab = tokenizer.get_vocab()
     aas_idx = [vocab[tok] for tok in C.AAs]
     return aas_idx
 
 
-def parse_fasta(fasta_file):
+def parse_fasta(fasta_file: str) -> Dict[str, str]:
     """Parse a fasta file and return a dictionary."""
     with open(fasta_file) as f:
         lines = f.readlines()
     fasta_dict = {}
     for line in lines:
+        if line.startswith("#") or not line.strip():
+            continue
         if line.startswith(">"):
             key = line.strip().split()[0][1:]
+            key = key.split("|")[0]
             fasta_dict[key] = ""
         else:
             fasta_dict[key] += line.strip().upper()
     return fasta_dict
 
 
-def dict_to_fasta(fasta_dict, fasta_file):
+def dict_to_fasta(fasta_dict: Dict[str, str], fasta_file: str):
     """Write a dictionary to a fasta file."""
     with open(fasta_file, "w") as f:
         for key, value in fasta_dict.items():
@@ -73,17 +83,17 @@ def dict_to_fasta(fasta_dict, fasta_file):
             f.write(f"{value}\n")
 
 
-def get_available_plms():
+def get_available_plms() -> List[str]:
     """Return the names of the available pretrained language models."""
     return list(C.PLM_ENCODERS.keys())
 
 
-def get_available_models():
+def get_available_models() -> List[str]:
     """Return the names of the available Mulan models."""
     return list(C.MODELS.keys())
 
 
-def load_pretrained_plm(model_name, device=None):
+def load_pretrained_plm(model_name: str, device: Optional[TorchDevice] = None):
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_id = C.PLM_ENCODERS.get(model_name)
@@ -117,7 +127,7 @@ def load_pretrained_plm(model_name, device=None):
     return model, tokenizer
 
 
-def load_pretrained(pretrained_model_name, device=None, **kwargs):
+def load_pretrained(pretrained_model_name: str, device: TorchDevice = None, **kwargs):
     """Load a pretrained model from disk."""
     model_path = C.MODELS.get(pretrained_model_name)
     if model_path is None:
@@ -128,7 +138,9 @@ def load_pretrained(pretrained_model_name, device=None, **kwargs):
 
 
 @torch.inference_mode()
-def embed_sequence(plm_model, plm_tokenizer, sequence):
+def embed_sequence(
+    plm_model: PreTrainedModel, plm_tokenizer: PreTrainedTokenizerBase, sequence: str
+):
     """Embed a sequence using a pretrained model."""
     sequence = sequence.upper()
     sequence = re.sub(r"[UZOB]", "X", sequence)  # always replace non-canonical AAs with X
@@ -149,7 +161,7 @@ def embed_sequence(plm_model, plm_tokenizer, sequence):
     return embedding
 
 
-def save_embedding(embedding, output_dir, name):
+def save_embedding(embedding: torch.Tensor, output_dir: str, name: str):
     """Save an embedding to disk."""
     embedding = embedding.squeeze(0).cpu()
     torch.save(embedding, os.path.join(output_dir, name + ".pt"))

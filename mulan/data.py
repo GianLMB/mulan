@@ -25,6 +25,23 @@ class MutatedComplexEmbeds(NamedTuple):
 
 
 class MulanDataset(Dataset):
+    """
+    Dataset class for handling muttaion data for MuLAN models.
+    Args:
+        mutated_complexes (List[MutatedComplex]): A list of MutatedComplex objects representing the mutated complexes.
+        wt_sequences (Dict[str, str]): A dictionary mapping sequence labels to wild-type sequences.
+        embeddings_dir (str): The directory path where the embeddings are stored or will be generated.
+        plm_model_name (str, optional): The name of the pre-trained language model to use for generating embeddings. Defaults to None.
+        scores (List[float], optional): A list of scores associated with the mutated complexes. Defaults to None.
+        zs_scores (List[float], optional): A list of Z-scores associated with the mutated complexes. Defaults to None.
+    Attributes:
+        sequences (Dict[str, str]): A dictionary mapping sequence labels to sequences, also including mutated sequences.
+        embeddings_dir (str): The directory path where the embeddings are stored or will be generated.
+        mutated_complexes (List[MutatedComplex]): A list of MutatedComplex objects representing the mutated complexes.
+        zs_scores (List[float]): A list of Z-scores associated with the mutated complexes.
+        scores (List[float]): A list of scores associated with the mutated complexes.
+    """
+
     def __init__(
         self,
         mutated_complexes: List[MutatedComplex],
@@ -82,7 +99,26 @@ class MulanDataset(Dataset):
         wt_sequences_file: str,
         embeddings_dir: str,
         plm_model_name: str = None,
+        add_zs_scores: bool = False,
     ):
+        """
+        Create an instance of the class using data from a table file.
+        Args:
+            mutated_complexes_file (str): The path to the table file containing information about mutated complexes.
+                Each line must contain the following columns:
+                - Wild-type sequence A label
+                - Wild-type sequence B label
+                - Mutations in the format '<wt_aa><chain:A,B><position><mut_aa>'. Multiple mutations must be separated by a comma.
+                - (Optional) Score associated with the mutated complex, for evaluation.
+                - (Optional) zero-shot scores associated with the mutated complex.
+            wt_sequences_file (str): The path to the file containing wild-type sequences.
+            embeddings_dir (str): The directory where embeddings are stored.
+            plm_model_name (str, optional): The name of the PLM model. Defaults to None.
+            add_zs_scores (bool, optional): Whether to include zero-shot scores. Defaults to False. If set to true,
+                the fourth column in the table file will be interpreted as zero-shot scores.
+        Returns:
+            An instance of the class with the specified data.
+        """
         wt_sequences = utils.parse_fasta(wt_sequences_file)
         # parse table file
         data = pd.read_table(mutated_complexes_file, sep=r"\s+", header=None)
@@ -92,8 +128,12 @@ class MulanDataset(Dataset):
         ]
         scores, zs_scores = None, None
         if len(data.columns) > 3:
-            scores = data[3].astype(float).tolist()
+            if add_zs_scores:
+                zs_scores = data[3].astype(float).tolist()
+            else:
+                scores = data[3].astype(float).tolist()
         if len(data.columns) > 4:
+            scores = data[3].astype(float).tolist()
             zs_scores = data[4].astype(float).tolist()
         return cls(
             mutated_complexes, wt_sequences, embeddings_dir, plm_model_name, scores, zs_scores
@@ -134,6 +174,14 @@ class MulanDataset(Dataset):
 
 
 class MulanDataCollator(object):
+    """
+    Data collator for MuLAN dataset.
+    Args:
+        padding_value (float, optional): The padding value to use. Defaults to 0.
+    Returns:
+        collated_batch: The collated batch of data.
+    """
+
     def __init__(self, padding_value: float = 0.0):
         self.padding_value = padding_value
 
@@ -166,7 +214,26 @@ def split_data(
     num_folds: int = 1,
     random_state: int = 42,
 ):
-    """Split data into train, validation and test sets for training or cross-validation."""
+    """Split data into train, validation and test sets for training or cross-validation.
+    Args:
+        mutated_complexes_file (str): The path to the file containing the mutated complexes data.
+        The format for the files is the same as the one used in the `MulanDataset.from_table` method.
+        output_dir (str, optional): The directory where the split data will be saved. Defaults to None.
+        add_validation_set (bool, optional): Whether to include a validation set. Defaults to True.
+        validation_size (float, optional): The proportion of data to be allocated to the validation set. Defaults to 0.15.
+        test_size (float, optional): The proportion of data to be allocated to the test set. Defaults to 0.15.
+        num_folds (int, optional): The number of folds for cross-validation. Defaults to 1.
+        random_state (int, optional): The random seed for reproducibility. Defaults to 42.
+    Returns:
+        Tuple[List[pd.DataFrame], List[pd.DataFrame], Optional[List[pd.DataFrame]]]:
+        A tuple containing the train, test, and validation data sets.
+        - train_data_all (List[pd.DataFrame]): A list of train data sets for each fold.
+        - test_data_all (List[pd.DataFrame]): A list of test data sets for each fold.
+        - val_data_all (Optional[List[pd.DataFrame]]): A list of validation data sets for each fold,
+          only present if add_validation_set is True.
+    Raises:
+        ValueError: If num_folds is less than or equal to 0 or if num_folds is 2 and add_validation_set is True.
+    """
 
     def _save_data(data, output_file):
         data.to_csv(output_file, sep="\t", index=False, header=False)
@@ -202,7 +269,13 @@ def split_data(
             if add_validation_set:
                 _save_data(val_data, os.path.join(output_dir, f"{files_basename}_val.tsv"))
     else:
-        fold_index = rng.integers(low=0, high=num_folds, size=len(data))
+        fold_index = np.array([i for i in range(num_folds) for _ in range(len(data) // num_folds)])
+        if len(fold_index) < len(data):
+            fold_index = np.concatenate(
+                [fold_index, rng.choice(range(num_folds), size=len(data) - len(fold_index))]
+            )
+        rng.shuffle(fold_index)
+        # fold_index = rng.integers(low=0, high=num_folds, size=len(data))
         for test_fold_index in range(num_folds):
             test_data = data[fold_index == test_fold_index]
             if add_validation_set:

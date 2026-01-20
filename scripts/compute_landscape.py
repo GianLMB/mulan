@@ -3,7 +3,7 @@
 import os
 import re
 from argparse import ArgumentParser
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import pandas as pd
 import torch
 import numpy as np

@@ -163,3 +163,4 @@ cython_debug/
 log/
 cache/
 notebooks/
+.DS_store

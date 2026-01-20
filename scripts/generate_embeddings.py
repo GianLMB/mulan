@@ -3,7 +3,7 @@ Embeddings are stored in PT format."""
 
 import os
 from argparse import ArgumentParser
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import torch
 
 import mulan

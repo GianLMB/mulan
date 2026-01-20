@@ -2,7 +2,7 @@
 
 import os
 from argparse import ArgumentParser
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import torch
 import h5py  
 
